@@ -4,20 +4,20 @@ This Go package provides a simple way to handle configuration parameters for Go 
 
 ## Features
 
-- **Manage options in structure field tags**
-  To describe configuration file structure you simply need to define the struct in the Go program code. In that struct you can use field tags to set different options and to determine config file decoding behavior. Currently, the next tags are available:
+- **Manage options in structure field tags**  
+To describe configuration file structure you simply need to define the struct in the Go program code. In that struct you can use field tags to set different options and to determine config file decoding behavior. Currently, the next tags are available:
   - `conf`: defines custom name for an option
   - `conf_extraopts`: provides advanced settings for option. This tag may have the following values:
     - `required`: option with this tag is mandatory. If it is set, but corresponding option is not defined in the config file, it will cause an error.
     - `default`: determines default value for the option. Can be set only for _Int*_, _Uint*_, _Bool_ and _String_ (not within the arrays, maps or slices) types.
 
-- **ENV variables as option values**
+- **ENV variables as option values**  
   You may specify the option value as `ENV:VARIABLE_NAME`. It will use the value of the relative environment variable (i.e. _VARIABLE_NAME_) as value for that option.
 
-- **YAML and JSON formats are available**
+- **YAML and JSON formats are available**  
   Currently, you can use config files in YAML or JSON formats. To switch the format you only need to specify the appropriate setting for config file load function.
 
-- **Catch the unknown options**
+- **Catch the unknown options**  
   You can catch options, that are contained in config file but has no matching in the result interface.
 
 ## Install
