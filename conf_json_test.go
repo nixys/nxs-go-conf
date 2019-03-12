@@ -4,45 +4,50 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"strconv"
 	"testing"
 )
 
 const (
-	testJSONTmpConfPath        = "/tmp/nxs-go-conf_test_json.conf"
-	testJSONValName            = "Test JSON Name"
-	testJSONValAge             = 18
-	testJSONValJobAddress      = "Test JSON Address"
-	testJSONValJobNameEnvVar   = "TEST_JSON_CONF_JOB_NAME"
-	testJSONValJobNameEnvVal   = "Test JSON Job name"
-	testJSONValJobSalaryEnvVar = "TEST_JSON_CONF_JOB_SALARY"
-	testJSONValJobSalaryEnvVal = 1.2
+	testJSONTmpConfPath     = "/tmp/nxs-go-conf_test_json.conf"
+	testJSONValString       = "Test String"
+	testJSONValString1      = "Test String1"
+	testJSONValString2      = "Test String2"
+	testJSONValString3      = "Test String3"
+	testJSONValInt          = 123
+	testJSONValMapKey1      = "map_key1"
+	testJSONValMapKey2      = "map_key2"
+	testJSONValMapKey3      = "map_key3"
+	testJSONValStringEnvVar = "TEST_JSON_CONF_STRING"
 )
 
 type tConfJSONIn struct {
-	Name           string         `json:"name,omitempty"`
-	Age            int            `json:"age,omitempty"`
-	Job            tConfJSONInJob `json:"job,omitempty"`
-	FavoriteDishes []string       `json:"favorite_dishes"`
+	StringTest       string                    `json:"string_test,omitempty"`
+	IntTest          int                       `json:"int_test,omitempty"`
+	StructsTest      StructJSONTest            `json:"struct_test,omitempty"`
+	StructsSliceTest []StructJSONTest          `json:"struct_slice_test,omitempty"`
+	StructsMapTest   map[string]StructJSONTest `json:"struct_map_test,omitempty"`
+	StringsSliceTest []string                  `json:"strings_slice_test"`
 }
 
-type tConfJSONInJob struct {
-	Name    string `json:"name,omitempty"`
-	Address string `json:"address,omitempty"`
-	Salary  string `json:"salary,omitempty"`
+type StructJSONTest struct {
+	StringTest string `json:"string_test,omitempty"`
 }
 
 func TestJSONFormat(t *testing.T) {
 
 	type tConfOut struct {
-		Name string `conf:"name" conf_extraopts:"required"`
-		Age  int    `conf_extraopts:"default=18"`
-		Job  struct {
-			Name    string  `conf:"name" conf_extraopts:"required"`
-			Address string  `conf:"address" conf_extraopts:"default=Test JSON Address"`
-			Salary  float64 `conf:"salary" conf_extraopts:"default=1.1"`
-		} `conf:"job" conf_extraopts:"required"`
-		FavoriteDishes []string `conf:"favorite_dishes"`
+		StringTest  string `conf:"string_test" conf_extraopts:"required"`
+		IntTest     int    `conf:"int_test" conf_extraopts:"default=18"`
+		StructsTest struct {
+			StringTest string `conf:"string_test" conf_extraopts:"required"`
+		} `conf:"struct_test" conf_extraopts:"required"`
+		StructsSliceTest []struct {
+			StringTest string `conf:"string_test" conf_extraopts:"default=Test String"`
+		} `conf:"struct_slice_test" conf_extraopts:"required"`
+		StructsMapTest map[string]struct {
+			StringTest string `conf:"string_test" conf_extraopts:"default=Test String"`
+		} `conf:"struct_map_test" conf_extraopts:"required"`
+		StringsSliceTest []string `conf:"strings_slice_test"`
 	}
 
 	var c tConfOut
@@ -65,45 +70,79 @@ func TestJSONFormat(t *testing.T) {
 	// Check loaded data
 
 	// Check specified string data
-	if c.Name != testJSONValName {
-		t.Fatal("Incorrect loaded data: Name")
+	if c.StringTest != testJSONValString {
+		t.Fatal("Incorrect loaded data: StringTest")
 	}
 
 	// Check default int value
-	if c.Age != testJSONValAge {
-		t.Fatal("Incorrect loaded data: Age")
+	if c.IntTest != testJSONValInt {
+		t.Fatal("Incorrect loaded data: IntTest")
 	}
 
-	// Check specified string ENV data
-	if c.Job.Name != testJSONValJobNameEnvVal {
-		t.Fatal("Incorrect loaded data: Job.Name")
+	// Check substruct field
+	if c.StructsTest.StringTest != testJSONValString {
+		t.Fatal("Incorrect loaded data: StructsTest.StringTest")
 	}
 
-	// Check default string value
-	if c.Job.Address != testJSONValJobAddress {
-		t.Fatal("Incorrect loaded data: Job.Address")
+	// Check substructs slice size
+	if len(c.StructsSliceTest) != 3 {
+		t.Fatal("Incorrect loaded data: StructsSliceTest")
 	}
 
-	// Check specified float ENV data
-	if c.Job.Salary != testJSONValJobSalaryEnvVal {
-		t.Fatal("Incorrect loaded data: Job.Salary")
+	// Check substruct map string field
+	if c.StructsMapTest[testJSONValMapKey1].StringTest != testJSONValString1 {
+		t.Fatal("Incorrect loaded data: StructsMapTest[map_key1].StringTest")
 	}
 
-	// Check string slices
-	if len(c.FavoriteDishes) != 2 {
-		t.Fatal("Incorrect loaded data: FavoriteDishes")
+	// Check substruct map string field ENV data
+	if c.StructsMapTest[testJSONValMapKey2].StringTest != testJSONValString2 {
+		t.Fatal("Incorrect loaded data: StructsMapTest[map_key2].StringTest")
+	}
+
+	// Check substruct map string field default data
+	if c.StructsMapTest[testJSONValMapKey3].StringTest != testJSONValString {
+		t.Fatal("Incorrect loaded data: StructsMapTest[map_key3].StringTest")
+	}
+
+	// Check string slice size
+	if len(c.StringsSliceTest) != 3 {
+		t.Fatal("Incorrect loaded data: StringsSliceTest")
 	}
 }
 
 func testPrepareJSONConfig(t *testing.T) {
 
 	c := tConfJSONIn{
-		Name: testJSONValName,
-		Job: tConfJSONInJob{
-			Name:   "ENV:" + testJSONValJobNameEnvVar,
-			Salary: "ENV:" + testJSONValJobSalaryEnvVar,
+		StringTest: testJSONValString,
+		IntTest:    testJSONValInt,
+		StructsTest: StructJSONTest{
+			StringTest: testJSONValString,
 		},
-		FavoriteDishes: []string{"apples", "ice cream"},
+		StructsSliceTest: []StructJSONTest{
+			{
+				StringTest: testJSONValString1,
+			},
+			{
+				StringTest: testJSONValString2,
+			},
+			{
+				StringTest: testJSONValString3,
+			},
+		},
+		StructsMapTest: map[string]StructJSONTest{
+			testJSONValMapKey1: StructJSONTest{
+				StringTest: testJSONValString1,
+			},
+			testJSONValMapKey2: StructJSONTest{
+				StringTest: "ENV:" + testJSONValStringEnvVar,
+			},
+			testJSONValMapKey3: StructJSONTest{},
+		},
+		StringsSliceTest: []string{
+			testJSONValString1,
+			testJSONValString2,
+			testJSONValString3,
+		},
 	}
 
 	s, err := json.Marshal(&c)
@@ -116,6 +155,5 @@ func testPrepareJSONConfig(t *testing.T) {
 	}
 
 	// Set ENV variables
-	os.Setenv(testJSONValJobNameEnvVar, testJSONValJobNameEnvVal)
-	os.Setenv(testJSONValJobSalaryEnvVar, strconv.FormatFloat(testJSONValJobSalaryEnvVal, 'f', 3, 64))
+	os.Setenv(testJSONValStringEnvVar, testJSONValString2)
 }

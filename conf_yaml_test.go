@@ -3,47 +3,52 @@ package conf
 import (
 	"io/ioutil"
 	"os"
-	"strconv"
 	"testing"
 
 	"gopkg.in/yaml.v2"
 )
 
 const (
-	testYAMLTmpConfPath        = "/tmp/nxs-go-conf_test_yaml.conf"
-	testYAMLValName            = "Test YAML Name"
-	testYAMLValAge             = 19
-	testYAMLValJobAddress      = "Test YAML Address"
-	testYAMLValJobNameEnvVar   = "TEST_YAML_CONF_JOB_NAME"
-	testYAMLValJobNameEnvVal   = "Test YAML Job name"
-	testYAMLValJobSalaryEnvVar = "TEST_YAML_CONF_JOB_SALARY"
-	testYAMLValJobSalaryEnvVal = 1.4
+	testYAMLTmpConfPath     = "/tmp/nxs-go-conf_test_yaml.conf"
+	testYAMLValString       = "Test String"
+	testYAMLValString1      = "Test String1"
+	testYAMLValString2      = "Test String2"
+	testYAMLValString3      = "Test String3"
+	testYAMLValInt          = 123
+	testYAMLValMapKey1      = "map_key1"
+	testYAMLValMapKey2      = "map_key2"
+	testYAMLValMapKey3      = "map_key3"
+	testYAMLValStringEnvVar = "TEST_YAML_CONF_STRING"
 )
 
 type tConfYAMLIn struct {
-	Name           string         `yaml:"name,omitempty"`
-	Age            int            `yaml:"age,omitempty"`
-	Job            tConfYAMLInJob `yaml:"job,omitempty"`
-	FavoriteDishes []string       `yaml:"favorite_dishes"`
+	StringTest       string                    `yaml:"string_test,omitempty"`
+	IntTest          int                       `yaml:"int_test,omitempty"`
+	StructsTest      StructYAMLTest            `yaml:"struct_test,omitempty"`
+	StructsSliceTest []StructYAMLTest          `yaml:"struct_slice_test,omitempty"`
+	StructsMapTest   map[string]StructYAMLTest `yaml:"struct_map_test,omitempty"`
+	StringsSliceTest []string                  `yaml:"strings_slice_test"`
 }
 
-type tConfYAMLInJob struct {
-	Name    string `yaml:"name,omitempty"`
-	Address string `yaml:"address,omitempty"`
-	Salary  string `yaml:"salary,omitempty"`
+type StructYAMLTest struct {
+	StringTest string `yaml:"string_test,omitempty"`
 }
 
 func TestYAMLFormat(t *testing.T) {
 
 	type tConfOut struct {
-		Name string `conf:"name" conf_extraopts:"required"`
-		Age  int    `conf_extraopts:"default=19"`
-		Job  struct {
-			Name    string  `conf:"name" conf_extraopts:"required"`
-			Address string  `conf:"address" conf_extraopts:"default=Test YAML Address"`
-			Salary  float64 `conf:"salary" conf_extraopts:"default=1.3"`
-		} `conf:"job" conf_extraopts:"required"`
-		FavoriteDishes []string `conf:"favorite_dishes"`
+		StringTest  string `conf:"string_test" conf_extraopts:"required"`
+		IntTest     int    `conf:"int_test" conf_extraopts:"default=18"`
+		StructsTest struct {
+			StringTest string `conf:"string_test" conf_extraopts:"required"`
+		} `conf:"struct_test" conf_extraopts:"required"`
+		StructsSliceTest []struct {
+			StringTest string `conf:"string_test" conf_extraopts:"default=Test String"`
+		} `conf:"struct_slice_test" conf_extraopts:"required"`
+		StructsMapTest map[string]struct {
+			StringTest string `conf:"string_test" conf_extraopts:"default=Test String"`
+		} `conf:"struct_map_test" conf_extraopts:"required"`
+		StringsSliceTest []string `conf:"strings_slice_test"`
 	}
 
 	var c tConfOut
@@ -66,45 +71,79 @@ func TestYAMLFormat(t *testing.T) {
 	// Check loaded data
 
 	// Check specified string data
-	if c.Name != testYAMLValName {
-		t.Fatal("Incorrect loaded data: Name")
+	if c.StringTest != testYAMLValString {
+		t.Fatal("Incorrect loaded data: StringTest")
 	}
 
 	// Check default int value
-	if c.Age != testYAMLValAge {
-		t.Fatal("Incorrect loaded data: Age")
+	if c.IntTest != testYAMLValInt {
+		t.Fatal("Incorrect loaded data: IntTest")
 	}
 
-	// Check specified string ENV data
-	if c.Job.Name != testYAMLValJobNameEnvVal {
-		t.Fatal("Incorrect loaded data: Job.Name")
+	// Check substruct field
+	if c.StructsTest.StringTest != testYAMLValString {
+		t.Fatal("Incorrect loaded data: StructsTest.StringTest")
 	}
 
-	// Check default string value
-	if c.Job.Address != testYAMLValJobAddress {
-		t.Fatal("Incorrect loaded data: Job.Address")
+	// Check substructs slice size
+	if len(c.StructsSliceTest) != 3 {
+		t.Fatal("Incorrect loaded data: StructsSliceTest")
 	}
 
-	// Check specified float ENV data
-	if c.Job.Salary != testYAMLValJobSalaryEnvVal {
-		t.Fatal("Incorrect loaded data: Job.Salary")
+	// Check substruct map string field
+	if c.StructsMapTest[testYAMLValMapKey1].StringTest != testYAMLValString1 {
+		t.Fatal("Incorrect loaded data: StructsMapTest[map_key1].StringTest")
 	}
 
-	// Check string slices
-	if len(c.FavoriteDishes) != 2 {
-		t.Fatal("Incorrect loaded data: FavoriteDishes")
+	// Check substruct map string field ENV data
+	if c.StructsMapTest[testYAMLValMapKey2].StringTest != testYAMLValString2 {
+		t.Fatal("Incorrect loaded data: StructsMapTest[map_key2].StringTest")
+	}
+
+	// Check substruct map string field default data
+	if c.StructsMapTest[testYAMLValMapKey3].StringTest != testYAMLValString {
+		t.Fatal("Incorrect loaded data: StructsMapTest[map_key3].StringTest")
+	}
+
+	// Check string slice size
+	if len(c.StringsSliceTest) != 3 {
+		t.Fatal("Incorrect loaded data: StringsSliceTest")
 	}
 }
 
 func testPrepareYAMLConfig(t *testing.T) {
 
 	c := tConfYAMLIn{
-		Name: testYAMLValName,
-		Job: tConfYAMLInJob{
-			Name:   "ENV:" + testYAMLValJobNameEnvVar,
-			Salary: "ENV:" + testYAMLValJobSalaryEnvVar,
+		StringTest: testYAMLValString,
+		IntTest:    testYAMLValInt,
+		StructsTest: StructYAMLTest{
+			StringTest: testYAMLValString,
 		},
-		FavoriteDishes: []string{"apples", "ice cream"},
+		StructsSliceTest: []StructYAMLTest{
+			{
+				StringTest: testYAMLValString1,
+			},
+			{
+				StringTest: testYAMLValString2,
+			},
+			{
+				StringTest: testYAMLValString3,
+			},
+		},
+		StructsMapTest: map[string]StructYAMLTest{
+			testYAMLValMapKey1: StructYAMLTest{
+				StringTest: testYAMLValString1,
+			},
+			testYAMLValMapKey2: StructYAMLTest{
+				StringTest: "ENV:" + testYAMLValStringEnvVar,
+			},
+			testYAMLValMapKey3: StructYAMLTest{},
+		},
+		StringsSliceTest: []string{
+			testYAMLValString1,
+			testYAMLValString2,
+			testYAMLValString3,
+		},
 	}
 
 	s, err := yaml.Marshal(&c)
@@ -117,6 +156,5 @@ func testPrepareYAMLConfig(t *testing.T) {
 	}
 
 	// Set ENV variables
-	os.Setenv(testYAMLValJobNameEnvVar, testYAMLValJobNameEnvVal)
-	os.Setenv(testYAMLValJobSalaryEnvVar, strconv.FormatFloat(testYAMLValJobSalaryEnvVal, 'f', 3, 64))
+	os.Setenv(testYAMLValStringEnvVar, testYAMLValString2)
 }
