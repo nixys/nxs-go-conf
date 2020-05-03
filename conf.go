@@ -123,6 +123,10 @@ func Load(conf interface{}, s Settings) error {
 // setDefaults sets the default values from tags.
 func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultValue) error {
 
+	if val.Kind() == reflect.Ptr && val.IsNil() == true {
+		return nil
+	}
+
 	// Check val is pointer
 	if val.Kind() == reflect.Ptr {
 		val = val.Elem()
@@ -211,6 +215,10 @@ func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultV
 
 // checkUsedRequredOpts checks that config file contains all requirement options
 func (s *Settings) checkUsedRequredOpts(val reflect.Value, parentName string) error {
+
+	if val.Kind() == reflect.Ptr && val.IsNil() == true {
+		return nil
+	}
 
 	// Check val is pointer
 	if val.Kind() == reflect.Ptr {
