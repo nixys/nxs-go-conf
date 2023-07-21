@@ -89,3 +89,13 @@ Run:
 ```
 CONF_JOB_NAME="Best job" CONF_JOB_SALARY="1.0" go run main.go
 ```
+
+## Feedback
+
+For support and feedback please contact me:
+- telegram: [@borisershov](https://t.me/borisershov)
+- e-mail: b.ershov@nixys.ru
+
+## License
+
+nxs-go-conf is released under the [MIT License](LICENSE).
