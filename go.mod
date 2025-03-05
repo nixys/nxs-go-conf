@@ -1,8 +1,8 @@
 module github.com/nixys/nxs-go-conf
 
-go 1.13
+go 1.21.1
 
 require (
-	github.com/mitchellh/mapstructure v1.1.2
-	gopkg.in/yaml.v2 v2.2.2
+	github.com/mitchellh/mapstructure v1.5.0
+	gopkg.in/yaml.v3 v3.0.1
 )

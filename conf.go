@@ -3,7 +3,6 @@ package conf
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"regexp"
@@ -11,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/mitchellh/mapstructure"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 // Available types for loadable config
@@ -66,12 +65,12 @@ func Load(conf interface{}, s Settings) error {
 		return fmt.Errorf("config load internal error: `conf` must be a pointer")
 	}
 
-	cfgFile, err := ioutil.ReadFile(s.ConfPath)
+	cfgFile, err := os.ReadFile(s.ConfPath)
 	if err != nil {
 		return fmt.Errorf("config error: %s", err)
 	}
 
-	rawConf := make(map[string]interface{})
+	rawConf := make(map[string]any)
 
 	switch s.ConfType {
 	case ConfigTypeYAML:

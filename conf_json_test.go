@@ -2,7 +2,6 @@ package conf
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -130,13 +129,13 @@ func testPrepareJSONConfig(t *testing.T) {
 			},
 		},
 		StructsMapTest: map[string]StructJSONTest{
-			testJSONValMapKey1: StructJSONTest{
+			testJSONValMapKey1: {
 				StringTest: testJSONValString1,
 			},
-			testJSONValMapKey2: StructJSONTest{
+			testJSONValMapKey2: {
 				StringTest: "ENV:" + testJSONValStringEnvVar,
 			},
-			testJSONValMapKey3: StructJSONTest{},
+			testJSONValMapKey3: {},
 		},
 		StringsSliceTest: []string{
 			testJSONValString1,
@@ -150,7 +149,7 @@ func testPrepareJSONConfig(t *testing.T) {
 		t.Fatal("Json encode error:", err)
 	}
 
-	if err := ioutil.WriteFile(testJSONTmpConfPath, s, 0644); err != nil {
+	if err := os.WriteFile(testJSONTmpConfPath, s, 0644); err != nil {
 		t.Fatal("Config file prepare error:", err)
 	}
 
