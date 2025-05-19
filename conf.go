@@ -48,8 +48,33 @@ type Settings struct {
 
 	// UnknownDeny if true fails with an error if config file contains fields that no matching in the result interface
 	UnknownDeny bool
+}
 
+// SettingsBytes struct contains settings config load from bytes
+type SettingsBytes struct {
+
+	// Data contains config data
+	Data []byte
+
+	// ConfType contains config file type (see `ConfigType` constants)
+	ConfType ConfigType
+
+	// WeaklyTypes if true makes "weak" conversions while config file decoding
+	// (see: https://godoc.org/github.com/mitchellh/mapstructure#DecoderConfig `WeaklyTypedInput` option)
+	WeaklyTypes bool
+
+	// UnknownDeny if true fails with an error if config file contains fields that no matching in the result interface
+	UnknownDeny bool
+}
+
+type conf struct {
 	md mapstructure.Metadata
+}
+
+type opts struct {
+	confType    ConfigType
+	weaklyTypes bool
+	unknownDeny bool
 }
 
 type defaultValue struct {
@@ -57,70 +82,108 @@ type defaultValue struct {
 	isSet bool
 }
 
-// Load reads config
-func Load(conf interface{}, s Settings) error {
+// Load reads config from file
+func Load(out any, s Settings) error {
 
-	// Check `conf` is a pointer
-	if reflect.TypeOf(conf).Kind() != reflect.Ptr {
-		return fmt.Errorf("config load internal error: `conf` must be a pointer")
-	}
-
-	cfgFile, err := os.ReadFile(s.ConfPath)
+	d, err := os.ReadFile(s.ConfPath)
 	if err != nil {
 		return fmt.Errorf("config error: %s", err)
 	}
 
+	if err := confRead(
+		out,
+		d,
+		opts{
+			confType:    s.ConfType,
+			weaklyTypes: s.WeaklyTypes,
+			unknownDeny: s.UnknownDeny,
+		},
+	); err != nil {
+		return fmt.Errorf("config error: %s", err)
+	}
+
+	return nil
+}
+
+// LoadBytes reads config from bytes
+func LoadBytes(out any, s SettingsBytes) error {
+
+	if err := confRead(
+		out,
+		s.Data,
+		opts{
+			confType:    s.ConfType,
+			weaklyTypes: s.WeaklyTypes,
+			unknownDeny: s.UnknownDeny,
+		},
+	); err != nil {
+		return fmt.Errorf("config error: %s", err)
+	}
+
+	return nil
+}
+
+// confRead reads config
+func confRead(out any, d []byte, o opts) error {
+
+	var c conf
+
+	// Check `r` is a pointer
+	if reflect.TypeOf(out).Kind() != reflect.Ptr {
+		return fmt.Errorf("`out` must be a pointer")
+	}
+
 	rawConf := make(map[string]any)
 
-	switch s.ConfType {
+	switch o.confType {
 	case ConfigTypeYAML:
-		if err := yaml.Unmarshal(cfgFile, &rawConf); err != nil {
-			return fmt.Errorf("config error: %s", err)
+		if err := yaml.Unmarshal(d, &rawConf); err != nil {
+			return err
 		}
 	case ConfigTypeJSON:
-		if err := json.Unmarshal(cfgFile, &rawConf); err != nil {
-			return fmt.Errorf("config error: %s", err)
+		if err := json.Unmarshal(d, &rawConf); err != nil {
+			return err
 		}
 	default:
-		return fmt.Errorf("config error: unknown config type")
+		return fmt.Errorf("unknown config type")
 	}
 
 	config := &mapstructure.DecoderConfig{
-		WeaklyTypedInput: s.WeaklyTypes,
-		Metadata:         &s.md,
-		DecodeHook:       s.decodeFromString,
-		Result:           conf,
+		WeaklyTypedInput: o.weaklyTypes,
+		Metadata:         &c.md,
+		DecodeHook:       c.decodeFromString,
+		Result:           out,
 		TagName:          tagConfName,
 	}
 
 	decoder, err := mapstructure.NewDecoder(config)
 	if err != nil {
-		return fmt.Errorf("config error: %v", err)
+		return err
 	}
 
 	err = decoder.Decode(rawConf)
 	if err != nil {
-		return fmt.Errorf("config error: %v", err)
+		return err
 	}
 
 	// Set options default values
-	if err := s.setDefaults(reflect.ValueOf(conf), "", defaultValue{"", false}); err != nil {
-		return fmt.Errorf("config error: %v", err)
+	if err := c.setDefaults(reflect.ValueOf(out), "", defaultValue{"", false}); err != nil {
+		return err
 	}
 
-	if err := s.checkUsedRequredOpts(reflect.ValueOf(conf), ""); err != nil {
-		return fmt.Errorf("config error: %v", err)
+	if err := c.checkUsedRequredOpts(reflect.ValueOf(out), ""); err != nil {
+		return err
 	}
 
-	if err := s.checkUnknownOpts(); err != nil {
-		return fmt.Errorf("config error: %v", err)
+	if err := c.checkUnknownOpts(o.unknownDeny); err != nil {
+		return err
 	}
 
 	return nil
 }
 
 // setDefaults sets the default values from tags.
-func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultValue) error {
+func (cnf *conf) setDefaults(val reflect.Value, parentName string, dv defaultValue) error {
 
 	if val.Kind() == reflect.Ptr && val.IsNil() == true {
 		return nil
@@ -144,14 +207,14 @@ func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultV
 
 			elName := parentName
 			if elName != "" {
-				elName = strings.Join([]string{elName, s.fieldNameNormalize(tf)}, ".")
+				elName = strings.Join([]string{elName, cnf.fieldNameNormalize(tf)}, ".")
 			} else {
-				elName = s.fieldNameNormalize(tf)
+				elName = cnf.fieldNameNormalize(tf)
 			}
 
-			v, isSet := s.tagValGet(tf.Tag.Get(tagConfExtraOptsName), tagConfDefaultName)
+			v, isSet := cnf.tagValGet(tf.Tag.Get(tagConfExtraOptsName), tagConfDefaultName)
 
-			if err := s.setDefaults(vf, elName, defaultValue{v, isSet}); err != nil {
+			if err := cnf.setDefaults(vf, elName, defaultValue{v, isSet}); err != nil {
 				return err
 			}
 		}
@@ -161,7 +224,7 @@ func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultV
 
 			elName := fmt.Sprintf("%s[%d]", parentName, i)
 
-			if err := s.setDefaults(vf, elName, defaultValue{"", false}); err != nil {
+			if err := cnf.setDefaults(vf, elName, defaultValue{"", false}); err != nil {
 				return err
 			}
 		}
@@ -175,7 +238,7 @@ func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultV
 
 			elName := fmt.Sprintf("%s[%s]", parentName, k)
 
-			if err := s.setDefaults(t, elName, defaultValue{"", false}); err != nil {
+			if err := cnf.setDefaults(t, elName, defaultValue{"", false}); err != nil {
 				return err
 			}
 
@@ -185,9 +248,9 @@ func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultV
 	default:
 
 		// If default value set for this element and this option not used in conf file, fill it with default value
-		if dv.isSet == true && s.optIsUsed(parentName, s.md.Keys) == false {
+		if dv.isSet == true && cnf.optIsUsed(parentName, cnf.md.Keys) == false {
 
-			d, err := s.convFromString(dv.value, val.Type())
+			d, err := cnf.convFromString(dv.value, val.Type())
 			if err != nil {
 				return err
 			}
@@ -213,7 +276,7 @@ func (s *Settings) setDefaults(val reflect.Value, parentName string, dv defaultV
 }
 
 // checkUsedRequredOpts checks that config file contains all requirement options
-func (s *Settings) checkUsedRequredOpts(val reflect.Value, parentName string) error {
+func (cnf *conf) checkUsedRequredOpts(val reflect.Value, parentName string) error {
 
 	if val.Kind() == reflect.Ptr && val.IsNil() == true {
 		return nil
@@ -232,18 +295,18 @@ func (s *Settings) checkUsedRequredOpts(val reflect.Value, parentName string) er
 
 			elName := parentName
 			if elName != "" {
-				elName = strings.Join([]string{elName, s.fieldNameNormalize(tf)}, ".")
+				elName = strings.Join([]string{elName, cnf.fieldNameNormalize(tf)}, ".")
 			} else {
-				elName = s.fieldNameNormalize(tf)
+				elName = cnf.fieldNameNormalize(tf)
 			}
 
 			tag := tf.Tag.Get(tagConfExtraOptsName)
 
-			if s.tagKeyCheck(tag, tagConfRequiredName) == true && s.optIsUsed(elName, s.md.Keys) == false {
+			if cnf.tagKeyCheck(tag, tagConfRequiredName) == true && cnf.optIsUsed(elName, cnf.md.Keys) == false {
 				return fmt.Errorf("required option '%s' is not specified", elName)
 			}
 
-			if err := s.checkUsedRequredOpts(vf, elName); err != nil {
+			if err := cnf.checkUsedRequredOpts(vf, elName); err != nil {
 				return err
 			}
 		}
@@ -253,7 +316,7 @@ func (s *Settings) checkUsedRequredOpts(val reflect.Value, parentName string) er
 
 			elName := fmt.Sprintf("%s[%d]", parentName, i)
 
-			if err := s.checkUsedRequredOpts(vf, elName); err != nil {
+			if err := cnf.checkUsedRequredOpts(vf, elName); err != nil {
 				return err
 			}
 		}
@@ -263,7 +326,7 @@ func (s *Settings) checkUsedRequredOpts(val reflect.Value, parentName string) er
 
 			elName := fmt.Sprintf("%s[%s]", parentName, k)
 
-			if err := s.checkUsedRequredOpts(vf, elName); err != nil {
+			if err := cnf.checkUsedRequredOpts(vf, elName); err != nil {
 				return err
 			}
 		}
@@ -272,16 +335,16 @@ func (s *Settings) checkUsedRequredOpts(val reflect.Value, parentName string) er
 	return nil
 }
 
-func (s *Settings) checkUnknownOpts() error {
-	if s.UnknownDeny == true && len(s.md.Unused) > 0 {
-		return fmt.Errorf("unknown option '%s'", s.md.Unused[0])
+func (cnf *conf) checkUnknownOpts(unknownDeny bool) error {
+	if unknownDeny == true && len(cnf.md.Unused) > 0 {
+		return fmt.Errorf("unknown option '%s'", cnf.md.Unused[0])
 	}
 	return nil
 }
 
 // decodeFromString decodes values from string to other types.
 // Able to use field values in format `ENV:VARIABLE_NAME` to get values from ENV variables.
-func (s *Settings) decodeFromString(f reflect.Type, t reflect.Type, v interface{}) (interface{}, error) {
+func (cnf *conf) decodeFromString(f reflect.Type, t reflect.Type, v any) (any, error) {
 
 	var str string
 
@@ -302,11 +365,11 @@ func (s *Settings) decodeFromString(f reflect.Type, t reflect.Type, v interface{
 		str = v.(string)
 	}
 
-	return s.convFromString(str, t)
+	return cnf.convFromString(str, t)
 }
 
 // convFromString converts string value to other type in accordance to `t`
-func (s *Settings) convFromString(str string, t reflect.Type) (interface{}, error) {
+func (cnf *conf) convFromString(str string, t reflect.Type) (any, error) {
 
 	switch t.Kind() {
 	case reflect.Bool:
@@ -325,11 +388,11 @@ func (s *Settings) convFromString(str string, t reflect.Type) (interface{}, erro
 }
 
 // fieldNameNormalize returns either name from tag if specified, or struct field name as is
-func (s *Settings) fieldNameNormalize(tf reflect.StructField) string {
+func (cnf *conf) fieldNameNormalize(tf reflect.StructField) string {
 
 	tag := tf.Tag.Get(tagConfName)
 
-	str := s.tagValIndexGet(tag, 0)
+	str := cnf.tagValIndexGet(tag, 0)
 	if str != "" {
 		return str
 	}
@@ -338,7 +401,7 @@ func (s *Settings) fieldNameNormalize(tf reflect.StructField) string {
 }
 
 // optIsUsed checks that string slice `usedOpts` contains `opt`
-func (s *Settings) optIsUsed(opt string, usedOpts []string) bool {
+func (cnf *conf) optIsUsed(opt string, usedOpts []string) bool {
 
 	for _, v := range usedOpts {
 		if v == opt {
@@ -350,7 +413,7 @@ func (s *Settings) optIsUsed(opt string, usedOpts []string) bool {
 }
 
 // tagPartsMakeMap prepairs map for tag pairs
-func (s *Settings) tagPartsMakeMap(tag string) map[string]string {
+func (cnf *conf) tagPartsMakeMap(tag string) map[string]string {
 
 	tm := make(map[string]string)
 
@@ -369,9 +432,9 @@ func (s *Settings) tagPartsMakeMap(tag string) map[string]string {
 }
 
 // tagKeyCheck cheks that `tag` contains `key`
-func (s *Settings) tagKeyCheck(tag string, key string) bool {
+func (cnf *conf) tagKeyCheck(tag string, key string) bool {
 
-	tm := s.tagPartsMakeMap(tag)
+	tm := cnf.tagPartsMakeMap(tag)
 
 	if _, ok := tm[key]; ok {
 		return true
@@ -381,16 +444,16 @@ func (s *Settings) tagKeyCheck(tag string, key string) bool {
 }
 
 // tagValGet gets from `tag` value for `key`
-func (s *Settings) tagValGet(tag string, key string) (string, bool) {
+func (cnf *conf) tagValGet(tag string, key string) (string, bool) {
 
-	tm := s.tagPartsMakeMap(tag)
+	tm := cnf.tagPartsMakeMap(tag)
 
 	v, ok := tm[key]
 	return v, ok
 }
 
 // tagConfGetName gets raw value (without splitting by '=') from tag by index
-func (s *Settings) tagValIndexGet(tag string, i int) string {
+func (cnf *conf) tagValIndexGet(tag string, i int) string {
 
 	p := strings.Split(tag, ",")
 
